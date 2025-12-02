@@ -93,6 +93,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
     private NamespacedKey brokenHeartKey;
 
+    private static final String PVP_UNLOCK_ENTRY_ID = "pvp_unlock";
+
     // players that have taken/inflicted PVP damage (for one-time warnings)
     private final Set<UUID> pvpWarned = new HashSet<>();
   
@@ -952,7 +954,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
 
 
-    @EventHandler(ignoreCancelled = true, priority = EventPriority.MONITOR)
+    @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     public void onPvpDamage(EntityDamageByEntityEvent event) {
         Entity victimEntity = event.getEntity();
         Entity damager = event.getDamager();
@@ -985,11 +987,28 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             return;
         }
 
+        if (!hasUnlockedPvp(attacker)) {
+            event.setCancelled(true);
+            attacker.sendMessage("§cYou must unlock PVP before fighting other players.");
+            return;
+        }
+
+        if (!hasUnlockedPvp(victim)) {
+            event.setCancelled(true);
+            attacker.sendMessage("§cThat player hasn't unlocked PVP yet.");
+            victim.sendMessage("§cYou haven't unlocked PVP yet. Progress the PVP Unlock entry to enable PVP.");
+            return;
+        }
+
         // Track last hit for kill attribution
         recordLastHit(victim, attacker);
 
         // First-time warning (existing behavior)
         markPvpWarned(attacker, victim);
+    }
+
+    private boolean hasUnlockedPvp(Player player) {
+        return SbpcAPI.hasUnlockedEntry(player.getUniqueId(), PVP_UNLOCK_ENTRY_ID);
     }
 
 
