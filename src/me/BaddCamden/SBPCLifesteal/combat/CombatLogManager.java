@@ -37,9 +37,9 @@ import java.util.*;
 public class CombatLogManager implements Listener {
 
     // How long a player remains combat-tagged after being hit (ms)
-    private static final long COMBAT_TAG_DURATION_MS = 5L * 60L * 1000L;
+    private final long combatTagDurationMs;
     // How long a combat-log zombie stays in the world before despawning (ms)
-    private static final long ZOMBIE_TTL_MS = 2L * 60L * 1000L;
+    private final long zombieTtlMs;
 
     private final SBPCLifestealPlugin plugin;
 
@@ -54,8 +54,10 @@ public class CombatLogManager implements Listener {
 
     private File playersFolder;
 
-    public CombatLogManager(SBPCLifestealPlugin plugin) {
+    public CombatLogManager(SBPCLifestealPlugin plugin, long combatTagDurationMs, long zombieTtlMs) {
         this.plugin = plugin;
+        this.combatTagDurationMs = combatTagDurationMs;
+        this.zombieTtlMs = zombieTtlMs;
         this.playersFolder = new File(plugin.getDataFolder(), "Players");
         if (!playersFolder.exists()) {
             playersFolder.mkdirs();
@@ -75,7 +77,7 @@ public class CombatLogManager implements Listener {
     // ------------------------------------------------------------------------
 
     public void tagCombat(UUID victim, long nowMillis) {
-        combatTagUntil.put(victim, nowMillis + COMBAT_TAG_DURATION_MS);
+        combatTagUntil.put(victim, nowMillis + combatTagDurationMs);
     }
 
     public void clearTag(UUID uuid) {
@@ -132,7 +134,7 @@ public class CombatLogManager implements Listener {
             if (entry.isZombieAlive()) {
                 // Re-spawn zombie if TTL not exceeded
                 long now = System.currentTimeMillis();
-                if (now - entry.getSpawnTimeMillis() <= ZOMBIE_TTL_MS) {
+                if (now - entry.getSpawnTimeMillis() <= zombieTtlMs) {
                     spawnZombieForEntry(entry);
                 } else {
                     // TTL expired while server was offline, treat as safe return case
@@ -420,7 +422,7 @@ public class CombatLogManager implements Listener {
                 continue;
             }
 
-            if (now - entry.getSpawnTimeMillis() > ZOMBIE_TTL_MS) {
+            if (now - entry.getSpawnTimeMillis() > zombieTtlMs) {
                 // TTL expired: despawn zombie, but keep stored items/xp for safe return
                 despawnZombie(entry.getZombieId());
                 entry.setZombieAlive(false);

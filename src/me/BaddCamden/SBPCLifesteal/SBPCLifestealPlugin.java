@@ -79,7 +79,7 @@ import java.util.stream.Collectors;
  * - First-time PVP damage between two players:
  *     both get warnings about this section trade mechanic.
  *
- * - Environmental death resets the player’s current SBPC entry progress
+ * - Environmental death resets the player's current SBPC entry progress
  *   (NOT the section), and progress speed stays unchanged in SBPC.
  *
  * - Health-based tick multiplier:
@@ -138,6 +138,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
     private CombatLogManager combatLogManager;
 
+    private long combatTagDurationMs;
+    private long combatLogZombieTtlMs;
+
     private int healthTaskId = -1;
     private static class LastHitInfo {
         final UUID attackerId;
@@ -173,8 +176,16 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         // Minimum max health (in health points). 2.0 = 1 heart.
         minMaxHealth = getConfig().getDouble("min-max-health", 2.0);
 
+        ConfigurationSection combatLogConfig = getConfig().getConfigurationSection("combat-log");
+        combatTagDurationMs = 1000L * (combatLogConfig != null
+                ? combatLogConfig.getLong("tag-duration-seconds", 5 * 60)
+                : 5 * 60L);
+        combatLogZombieTtlMs = 1000L * (combatLogConfig != null
+                ? combatLogConfig.getLong("zombie-ttl-seconds", 2 * 60)
+                : 2 * 60L);
+
         loadData();
-        combatLogManager = new CombatLogManager(this);
+        combatLogManager = new CombatLogManager(this, combatTagDurationMs, combatLogZombieTtlMs);
         // Register it as an event listener
         getServer().getPluginManager().registerEvents(combatLogManager, this);
 
@@ -329,8 +340,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         ItemStack stack = new ItemStack(Material.BEETROOT, amount);
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§cBroken Heart");
-            meta.setLore(Collections.singletonList("§7A shattered fragment of life."));
+            meta.setDisplayName("Â§cBroken Heart");
+            meta.setLore(Collections.singletonList("Â§7A shattered fragment of life."));
             meta.getPersistentDataContainer().set(brokenHeartKey, PersistentDataType.BYTE, (byte) 1);
             stack.setItemMeta(meta);
         }
@@ -560,7 +571,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
 
         Bukkit.getScheduler().runTask(this, () -> {
-            p.kickPlayer("§cYou have lost all of your hearts and are banned by the Lifesteal system.");
+            p.kickPlayer("Â§cYou have lost all of your hearts and are banned by the Lifesteal system.");
         });
 
         getLogger().info("Lifesteal banned player " + p.getName());
@@ -570,8 +581,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     private void spendDestroyedHeartOnNewDeath(Player p) {
         destroyedHalfHeartsStock--;
         if (destroyedHalfHeartsStock < 0) destroyedHalfHeartsStock = 0;
-        setBaseMaxHealth(p, 1.0); // ½ heart max
-        p.sendMessage("§dA destroyed Broken Heart saved you. You return with §c½§d heart!");
+        setBaseMaxHealth(p, 1.0); // Â½ heart max
+        p.sendMessage("Â§dA destroyed Broken Heart saved you. You return with Â§cÂ½Â§d heart!");
         getLogger().info("Destroyed Broken Heart prevented ban for " + p.getName());
         saveData();
     }
@@ -592,10 +603,23 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             pendingReviveHearts.put(revived, pending);
 
             getLogger().info("Destroyed Broken Heart revived banned player " + revived
-                    + " with pending ½-heart.");
+                    + " with pending Â½-heart.");
         }
 
         saveData();
+    }
+
+    private void scheduleBrokenHeartDestructionCount(Item item, int amount) {
+        UUID id = item.getUniqueId();
+        Bukkit.getScheduler().runTask(this, () -> {
+            if (!item.isValid() || item.isDead()) {
+                if (countedBrokenHeartItems.add(id)) {
+                    onBrokenHeartDestroyed(amount);
+                }
+            } else {
+                countedBrokenHeartItems.remove(id);
+            }
+        });
     }
 
     // ------------------------------------------------------------------------
@@ -639,8 +663,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             SbpcAPI.dropNowDisallowedEquippedItems(vId, victim.getLocation());
         }
 
-        killer.sendMessage("§a§lHe he he! Killing another player in a higher section gained you a section!");
-        victim.sendMessage("§c§lYou lost a progression section for dying to someone in a lower section.");
+        killer.sendMessage("Â§aÂ§lHe he he! Killing another player in a higher section gained you a section!");
+        victim.sendMessage("Â§cÂ§lYou lost a progression section for dying to someone in a lower section.");
         saveData();
     }
 
@@ -649,10 +673,10 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         boolean changedB = pvpWarned.add(b.getUniqueId());
 
         if (changedA) {
-            a.sendMessage("§c§lWatch out! Dying to another player who is in a lower section than you will cost you a section!");
+            a.sendMessage("Â§cÂ§lWatch out! Dying to another player who is in a lower section than you will cost you a section!");
         }
         if (changedB) {
-            b.sendMessage("§a§lHe he he! Killing another player who is in a higher section than you will gain you a section!");
+            b.sendMessage("Â§aÂ§lHe he he! Killing another player who is in a higher section than you will gain you a section!");
         }
     }
     /**
@@ -896,7 +920,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             }
 
             String savedMsg = getConfig().getString("messages.saved-by-destroyed-heart",
-                    "§aA destroyed Broken Heart has saved you from banishment!");
+                    "&dA destroyed Broken Heart has saved you from banishment!");
             player.sendMessage(ChatColor.translateAlternateColorCodes('&', savedMsg));
             return;
         }
@@ -1019,7 +1043,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         UUID id = event.getPlayer().getUniqueId();
         if (isBanned(id)) {
             event.disallow(PlayerLoginEvent.Result.KICK_BANNED,
-                    "§cYou are banned by the Lifesteal system (no hearts remaining).");
+                    "Â§cYou are banned by the Lifesteal system (no hearts remaining).");
         }
     }
 
@@ -1033,7 +1057,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             if (amt > 0) {
                 setBaseMaxHealth(p, Math.max(0.0, getBaseMaxHealth(p)));
                 applyMaxHealthChange(p, amt);
-                p.sendMessage("§dA Broken Heart that was destroyed brought you back with " + amt + " half-heart(s).");
+                p.sendMessage("Â§dA Broken Heart that was destroyed brought you back with " + amt + " half-heart(s).");
             }
             saveData();
         }
@@ -1068,11 +1092,11 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         if (!isBrokenHeart(item)) return;
 
         Player p = event.getPlayer();
-        applyMaxHealthChange(p, 1); // +½ heart max
+        applyMaxHealthChange(p, 1); // +Â½ heart max
 
         // consume one
         item.setAmount(item.getAmount() - 1);
-        p.sendMessage("§dYou feel a tiny spark of life return. (§c+½§d heart)");
+        p.sendMessage("Â§dYou feel a tiny spark of life return. (Â§c+Â½Â§d heart)");
 
         event.setCancelled(true);
     }
@@ -1099,14 +1123,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         ItemStack stack = item.getItemStack();
         if (!isBrokenHeart(stack)) return;
 
-        UUID id = item.getUniqueId();
-        // If we've already processed this item entity as destroyed, do nothing
-        if (!countedBrokenHeartItems.add(id)) {
-            return;
-        }
-
         int amt = stack.getAmount();
-        onBrokenHeartDestroyed(amt);
+        scheduleBrokenHeartDestructionCount(item, amt);
     }
 
 
@@ -1125,14 +1143,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             cause == EntityDamageEvent.DamageCause.ENTITY_EXPLOSION ||
             cause == EntityDamageEvent.DamageCause.CONTACT) {
 
-            UUID id = item.getUniqueId();
-            // Only count this item stack once, even if it takes multiple damage ticks
-            if (!countedBrokenHeartItems.add(id)) {
-                return;
-            }
-
             int amt = stack.getAmount();
-            onBrokenHeartDestroyed(amt);
+            scheduleBrokenHeartDestructionCount(item, amt);
         }
     }
 

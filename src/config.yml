@@ -30,6 +30,17 @@ broken-heart-item:
     - "&7Right-click to restore &c½ &7heart."
 
 # ----------------------------------------------------------
+# Combat logging
+# ----------------------------------------------------------
+combat-log:
+  # How long (in seconds) a player stays tagged after PvP damage.
+  tag-duration-seconds: 300
+
+  # How long (in seconds) a combat-logger zombie stays in the world
+  # before despawning safely if not killed by a player.
+  zombie-ttl-seconds: 120
+
+# ----------------------------------------------------------
 # Section PVP trade messages
 # ----------------------------------------------------------
 messages:
