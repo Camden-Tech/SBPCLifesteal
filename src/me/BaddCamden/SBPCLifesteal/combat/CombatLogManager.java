@@ -181,6 +181,10 @@ public class CombatLogManager implements Listener {
         UUID uuid = player.getUniqueId();
         long now = System.currentTimeMillis();
 
+        if (player.isBanned()) {
+            return;
+        }
+
         if (!isCombatTagged(uuid, now)) {
             return;
         }
