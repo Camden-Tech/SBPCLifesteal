@@ -1,0 +1,7 @@
+name: SBPCLifesteal
+main: me.BaddCamden.SBPCLifesteal.SBPCLifestealPlugin
+version: 1.0.0
+api-version: 1.21
+depend:
+  - SBPC
+description: "Lifesteal hearts, bans, destroyed Broken Hearts, and SBPC section trades."

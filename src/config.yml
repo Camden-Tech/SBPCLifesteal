@@ -1,0 +1,66 @@
+# ==========================================================
+# SBPCLifesteal - Configuration
+# ==========================================================
+
+# ----------------------------------------------------------
+# Lifesteal core settings
+# ----------------------------------------------------------
+lifesteal:
+  # Maximum health here is in "health points", not hearts.
+  # 20.0 = 10 hearts (vanilla). You can raise this if you want.
+  base-max-health: 20.0
+
+  # The minimum max health a player can be reduced to.
+  # 2.0 = 1 heart. If a death would push them below this, they are "banned" by lifesteal.
+  min-max-health: 2.0
+
+  # How many hearts (not half-hearts) are lost on PvP death.
+  pvp-loss-hearts: 1.0
+
+  # How many hearts (not half-hearts) are lost on environmental death.
+  # This is typically 0.5 (half a heart).
+  env-loss-hearts: 0.5
+
+broken-heart-item:
+  # Display name and lore for the dropped half-heart item.
+  # This item is a BEETROOT internally, but you should *not* be able to eat or plant it.
+  name: "&dBroken Heart"
+  lore:
+    - "&7A fragile fragment of a lost soul."
+    - "&7Right-click to restore &c½ &7heart."
+
+# ----------------------------------------------------------
+# Section PVP trade messages
+# ----------------------------------------------------------
+messages:
+  pvp-first-hit-victim: "&c&lWatch out! &fDying to another player who is in a &ehigher section&f than you will cost you a section!"
+  pvp-first-hit-attacker: "&a&lHe he he! &fKilling another player who is in a &ehigher section&f than you will gain you a section!"
+
+  pvp-death-victim: "&cYou were killed by &e{killer}&c and lost &4{hearts}&c heart(s)!"
+  pvp-death-killer: "&aYou killed &e{victim}&a and gained &2{hearts}&a heart(s)!"
+
+  env-death-loss: "&cYou died to the environment and lost &4{hearts}&c heart(s)!"
+
+  banned-message: "&4You have run out of hearts and have been banned from the world."
+  saved-by-destroyed-heart: "&dA destroyed Broken Heart has saved you from banishment!"
+
+  section-bump-up: "&aYour kill has bumped you up to section &e{section}&a!"
+  section-bump-down: "&cDying to a lower-section player has set you back to section &e{section}&c!"
+
+# ----------------------------------------------------------
+# Persisted data
+# These values are managed by the plugin at runtime.
+# Do NOT edit them unless you know what you are doing.
+# ----------------------------------------------------------
+
+# Total number of "destroyed" half-hearts in stock.
+destroyedHalfHeartsStock: 0
+
+# List of UUID strings of players currently banned by SBPCLifesteal.
+bannedPlayers: []
+
+# Map: UUID -> number of pending revive half-hearts already stored for that player.
+pendingReviveHearts: {}
+
+# Map: victim UUID -> (map of sectionId -> true if that victim already got demoted once from that section)
+victimSectionDemoted: {}
