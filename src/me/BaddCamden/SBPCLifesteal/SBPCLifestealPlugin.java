@@ -469,6 +469,12 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         return attr.getBaseValue();
     }
 
+    private int getDefaultConfiguredHearts() {
+        double configuredBase = getConfig().getDouble("lifesteal.base-max-health", 20.0);
+        int fromConfigured = (int) Math.round(configuredBase / 2.0);
+        return Math.max(1, fromConfigured);
+    }
+
     private void setBaseMaxHealth(Player p, double value) {
         AttributeInstance attr = p.getAttribute(Attribute.MAX_HEALTH);
         if (attr == null) return;
@@ -754,11 +760,14 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Loads a player's heart count from Players/<uuid>.yml under "lifesteal.hearts".
-     * Defaults to 10 if missing (20 health / 2 = 10 hearts).
+     * Loads a player's heart count from players/<uuid>.yml under "lifesteal.hearts".
+     * Defaults to the configured base max health if missing.
      */
     private int loadHeartsFromFile(UUID uuid) {
-        File playersFolder = new File(getDataFolder(), "Players");
+        if (playersFolder == null) {
+            playersFolder = new File(getDataFolder(), "players");
+        }
+
         if (!playersFolder.exists()) {
             playersFolder.mkdirs();
         }
@@ -766,7 +775,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         File file = new File(playersFolder, uuid.toString() + ".yml");
         if (!file.exists()) {
             // Default hearts if no file yet
-            return 10;
+            return getDefaultConfiguredHearts();
         }
 
         YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
@@ -777,7 +786,10 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
      * Saves a player's heart count to Players/<uuid>.yml under "lifesteal.hearts".
      */
     private void saveHeartsToFile(UUID uuid, int hearts) {
-        File playersFolder = new File(getDataFolder(), "Players");
+        if (playersFolder == null) {
+            playersFolder = new File(getDataFolder(), "players");
+        }
+
         if (!playersFolder.exists()) {
             playersFolder.mkdirs();
         }
@@ -1061,6 +1073,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             }
             saveData();
         }
+
+        int configuredHearts = loadHeartsFromFile(id);
+        applyHeartsToOnlinePlayer(p, configuredHearts);
     }
 
     @EventHandler
@@ -1070,7 +1085,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onPlayerRespawn(PlayerRespawnEvent event) {
-        // nothing additional needed here for lifesteal itself; SBPC continues independently
+        Player player = event.getPlayer();
+        int configuredHearts = loadHeartsFromFile(player.getUniqueId());
+        applyHeartsToOnlinePlayer(player, configuredHearts);
     }
 
     // ------------------------------------------------------------------------
