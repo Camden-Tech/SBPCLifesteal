@@ -11,6 +11,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
@@ -1008,7 +1009,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     }
 
     private boolean hasUnlockedPvp(Player player) {
-        return SbpcAPI.hasUnlockedEntry(player.getUniqueId(), PVP_UNLOCK_ENTRY_ID);
+        return SbpcAPI.isCustomUnlocked(player.getUniqueId(), PVP_UNLOCK_ENTRY_ID);
     }
 
 
