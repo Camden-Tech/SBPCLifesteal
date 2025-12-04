@@ -328,6 +328,11 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             return;
         }
 
+        // Always capture current online heart totals before writing files
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            persistPlayerHearts(online, getBaseMaxHealth(online));
+        }
+
         // global (non-player) data still goes in config.yml
         getConfig().set("destroyedHalfHeartsStock", destroyedHalfHeartsStock);
         saveConfig();
@@ -514,10 +519,10 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         return attr.getBaseValue();
     }
 
-    private int getDefaultConfiguredHearts() {
+    private double getDefaultConfiguredHearts() {
         double configuredBase = getConfig().getDouble("lifesteal.base-max-health", 20.0);
-        int fromConfigured = (int) Math.round(configuredBase / 2.0);
-        return Math.max(1, fromConfigured);
+        double fromConfigured = configuredBase / 2.0;
+        return Math.max(1.0, fromConfigured);
     }
 
     private void setBaseMaxHealth(Player p, double value) {
@@ -569,7 +574,13 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             newVal = 0;
         }
         setBaseMaxHealth(p, newVal);
+        persistPlayerHearts(p, newVal);
         return deltaHalfHearts;
+    }
+
+    private void persistPlayerHearts(Player p, double maxHealthValue) {
+        double hearts = maxHealthValue / 2.0;
+        saveHeartsToFile(p.getUniqueId(), hearts);
     }
 
     // ------------------------------------------------------------------------
@@ -647,7 +658,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
 
         Bukkit.getScheduler().runTask(this, () -> {
-            p.kickPlayer("§cYou have lost all of your hearts and are banned by the Lifesteal system.");
+            p.kickPlayer(colorize("&cYou have lost all of your hearts and are banned by the Lifesteal system."));
         });
 
         getLogger().info("Lifesteal banned player " + p.getName());
@@ -658,7 +669,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         destroyedHalfHeartsStock--;
         if (destroyedHalfHeartsStock < 0) destroyedHalfHeartsStock = 0;
         setBaseMaxHealth(p, 1.0); // ½ heart max
-        p.sendMessage("§dA destroyed Broken Heart saved you. You return with §c½§d heart!");
+        p.sendMessage(colorize("&dA destroyed Broken Heart saved you. You return with &c½&d heart!"));
         getLogger().info("Destroyed Broken Heart prevented ban for " + p.getName());
         saveData();
     }
@@ -739,8 +750,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             SbpcAPI.dropNowDisallowedEquippedItems(vId, victim.getLocation());
         }
 
-        killer.sendMessage("§a§lHe he he! Killing another player in a higher section gained you a section!");
-        victim.sendMessage("§c§lYou lost a progression section for dying to someone in a lower section.");
+        killer.sendMessage(colorize("&a&lHe he he! Killing another player in a higher section gained you a section!"));
+        victim.sendMessage(colorize("&c&lYou lost a progression section for dying to someone in a lower section."));
         saveData();
     }
 
@@ -749,10 +760,10 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         boolean changedB = pvpWarned.add(b.getUniqueId());
 
         if (changedA) {
-            a.sendMessage("§c§lWatch out! Dying to another player who is in a lower section than you will cost you a section!");
+            a.sendMessage(colorize("&c&lWatch out! Dying to another player who is in a lower section than you will cost you a section!"));
         }
         if (changedB) {
-            b.sendMessage("§a§lHe he he! Killing another player who is in a higher section than you will gain you a section!");
+            b.sendMessage(colorize("&a&lHe he he! Killing another player who is in a higher section than you will gain you a section!"));
         }
     }
     /**
@@ -775,8 +786,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
 
         // 1) Adjust offline victim hearts
-        int victimHearts = loadHeartsFromFile(victimId);
-        int newVictimHearts = Math.max(0, victimHearts - 1);
+        double victimHearts = loadHeartsFromFile(victimId);
+        double newVictimHearts = Math.max(0.0, victimHearts - 1.0);
         saveHeartsToFile(victimId, newVictimHearts);
 
         // 2) Ban if hearts reached zero
@@ -818,8 +829,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
 
         // 3) Adjust killer hearts
-        int killerHearts = loadHeartsFromFile(killer.getUniqueId());
-        int newKillerHearts = killerHearts + 1;
+        double killerHearts = loadHeartsFromFile(killer.getUniqueId());
+        double newKillerHearts = killerHearts + 1.0;
         saveHeartsToFile(killer.getUniqueId(), newKillerHearts);
         applyHeartsToOnlinePlayer(killer, newKillerHearts);
 
@@ -833,7 +844,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
      * Loads a player's heart count from players/<uuid>.yml under "lifesteal.hearts".
      * Defaults to the configured base max health if missing.
      */
-    private int loadHeartsFromFile(UUID uuid) {
+    private double loadHeartsFromFile(UUID uuid) {
         if (playersFolder == null) {
             playersFolder = resolvePlayersFolder();
         }
@@ -845,13 +856,13 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
 
         YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
-        return cfg.getInt("lifesteal.hearts", 10);
+        return cfg.getDouble("lifesteal.hearts", getDefaultConfiguredHearts());
     }
 
     /**
      * Saves a player's heart count to players/<uuid>.yml under "lifesteal.hearts".
      */
-    private void saveHeartsToFile(UUID uuid, int hearts) {
+    private void saveHeartsToFile(UUID uuid, double hearts) {
         if (playersFolder == null) {
             playersFolder = resolvePlayersFolder();
         }
@@ -874,8 +885,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
      * Applies a heart count to an online player's max health attribute.
      * Assumes 1 heart = 2 health points.
      */
-    private void applyHeartsToOnlinePlayer(Player player, int hearts) {
-        double newMaxHealth = Math.max(2.0, hearts * 2.0);
+    private void applyHeartsToOnlinePlayer(Player player, double hearts) {
+        double newMaxHealth = Math.max(minMaxHealth, hearts * 2.0);
         var attr = player.getAttribute(Attribute.MAX_HEALTH);
         if (attr != null) {
             attr.setBaseValue(newMaxHealth);
@@ -1049,14 +1060,14 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
         if (!hasUnlockedPvp(attacker)) {
             event.setCancelled(true);
-            attacker.sendMessage("§cYou must unlock PVP before fighting other players.");
+            attacker.sendMessage(colorize("&cYou must unlock PVP before fighting other players."));
             return;
         }
 
         if (!hasUnlockedPvp(victim)) {
             event.setCancelled(true);
-            attacker.sendMessage("§cThat player hasn't unlocked PVP yet.");
-            victim.sendMessage("§cYou haven't unlocked PVP yet. Progress the PVP Unlock entry to enable PVP.");
+            attacker.sendMessage(colorize("&cThat player hasn't unlocked PVP yet."));
+            victim.sendMessage(colorize("&cYou haven't unlocked PVP yet. Progress the PVP Unlock entry to enable PVP."));
             return;
         }
 
@@ -1164,7 +1175,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         UUID id = event.getPlayer().getUniqueId();
         if (isBanned(id)) {
             event.disallow(PlayerLoginEvent.Result.KICK_BANNED,
-                    "§cYou are banned by the Lifesteal system (no hearts remaining).");
+                    colorize("&cYou are banned by the Lifesteal system (no hearts remaining)."));
         }
     }
 
@@ -1178,12 +1189,12 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             if (amt > 0) {
                 setBaseMaxHealth(p, Math.max(0.0, getBaseMaxHealth(p)));
                 applyMaxHealthChange(p, amt);
-                p.sendMessage("§dA Broken Heart that was destroyed brought you back with " + amt + " half-heart(s).");
+                p.sendMessage(colorize("&dA Broken Heart that was destroyed brought you back with " + amt + " half-heart(s)."));
             }
             saveData();
         }
 
-        int configuredHearts = loadHeartsFromFile(id);
+        double configuredHearts = loadHeartsFromFile(id);
         applyHeartsToOnlinePlayer(p, configuredHearts);
     }
 
@@ -1195,7 +1206,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     @EventHandler
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
-        int configuredHearts = loadHeartsFromFile(player.getUniqueId());
+        double configuredHearts = loadHeartsFromFile(player.getUniqueId());
         applyHeartsToOnlinePlayer(player, configuredHearts);
     }
 
@@ -1222,7 +1233,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
         // consume one
         item.setAmount(item.getAmount() - 1);
-        p.sendMessage("§dYou feel a tiny spark of life return. (§c+½§d heart)");
+        p.sendMessage(colorize("&dYou feel a tiny spark of life return. (&c+½&d heart)"));
 
         event.setCancelled(true);
     }
