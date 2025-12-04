@@ -169,15 +169,17 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             Bukkit.getPluginManager().disablePlugin(this);
             return;
         }
+        saveDefaultConfig();
+        reloadConfig();
         combatLoggerOwnerKey = new NamespacedKey(this, "combat_logger_owner");
         this.brokenHeartKey = new NamespacedKey(this, "broken_heart");
-        this.playersFolder = new File(getDataFolder(), "players");
+        this.playersFolder = resolvePlayersFolder();
         // Hearts lost (in hearts)
-        pvpLossHearts = getConfig().getDouble("pvp-loss-hearts", 1.0);
-        envLossHearts = getConfig().getDouble("env-loss-hearts", 0.5);
+        pvpLossHearts = getConfig().getDouble("lifesteal.pvp-loss-hearts", 1.0);
+        envLossHearts = getConfig().getDouble("lifesteal.env-loss-hearts", 0.5);
 
         // Minimum max health (in health points). 2.0 = 1 heart.
-        minMaxHealth = getConfig().getDouble("min-max-health", 2.0);
+        minMaxHealth = getConfig().getDouble("lifesteal.min-max-health", 2.0);
 
         ConfigurationSection combatLogConfig = getConfig().getConfigurationSection("combat-log");
         combatTagDurationMs = 1000L * (combatLogConfig != null
@@ -188,7 +190,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
                 : 2 * 60L);
 
         loadData();
-        combatLogManager = new CombatLogManager(this, combatTagDurationMs, combatLogZombieTtlMs);
+        combatLogManager = new CombatLogManager(this, combatTagDurationMs, combatLogZombieTtlMs, playersFolder);
         // Register it as an event listener
         getServer().getPluginManager().registerEvents(combatLogManager, this);
 
@@ -219,14 +221,52 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         saveData();
     }
 
+    private File resolvePlayersFolder() {
+        File lower = new File(getDataFolder(), "players");
+        File upper = new File(getDataFolder(), "Players");
+
+        if (upper.exists() && upper.isDirectory()) {
+            if (!lower.exists() && upper.renameTo(lower)) {
+                return lower;
+            }
+
+            if (!lower.exists() && !lower.mkdirs()) {
+                getLogger().warning("Could not create players data folder at " + lower.getPath());
+                return lower;
+            }
+
+            File[] legacyFiles = upper.listFiles();
+            if (legacyFiles != null) {
+                for (File legacy : legacyFiles) {
+                    File dest = new File(lower, legacy.getName());
+                    if (dest.exists()) {
+                        continue;
+                    }
+                    if (!legacy.renameTo(dest)) {
+                        getLogger().warning("Could not move legacy player data file " + legacy.getName()
+                                + " from Players to players folder.");
+                    }
+                }
+            }
+
+            File[] remaining = upper.listFiles();
+            if (remaining == null || remaining.length == 0) {
+                upper.delete();
+            }
+        }
+
+        if (!lower.exists() && !lower.mkdirs()) {
+            getLogger().warning("Could not create players data folder at " + lower.getPath());
+        }
+
+        return lower;
+    }
+
     // ------------------------------------------------------------------------
     // Persistence
     // ------------------------------------------------------------------------
 
     private void loadData() {
-        saveDefaultConfig();
-        reloadConfig();
-
         this.destroyedHalfHeartsStock = getConfig().getInt("destroyedHalfHeartsStock", 0);
 
         this.banQueue.clear();
@@ -343,8 +383,10 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         ItemStack stack = new ItemStack(Material.BEETROOT, amount);
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName("§cBroken Heart");
-            meta.setLore(Collections.singletonList("§7A shattered fragment of life."));
+            String displayName = getConfig().getString("broken-heart-item.name", "&cBroken Heart");
+            List<String> lore = getConfig().getStringList("broken-heart-item.lore");
+            meta.setDisplayName(colorize(displayName));
+            meta.setLore(colorizeList(lore));
             meta.getPersistentDataContainer().set(brokenHeartKey, PersistentDataType.BYTE, (byte) 1);
             stack.setItemMeta(meta);
         }
@@ -486,6 +528,28 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         if (p.getHealth() > newVal) {
             p.setHealth(newVal);
         }
+    }
+
+    private String colorize(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return ChatColor.translateAlternateColorCodes('&', raw);
+    }
+
+    private List<String> colorizeList(List<String> rawList) {
+        if (rawList == null) {
+            return Collections.emptyList();
+        }
+        return rawList.stream().map(this::colorize).collect(Collectors.toList());
+    }
+
+    private String formatHearts(int halfHearts) {
+        double hearts = halfHearts / 2.0;
+        if (Math.abs(hearts - Math.round(hearts)) < 0.0001) {
+            return String.format(Locale.US, "%.0f", hearts);
+        }
+        return String.format(Locale.US, "%.1f", hearts);
     }
 
     /**
@@ -698,7 +762,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
      * - If the victim reaches 0 hearts (or whatever threshold you use),
      *   they should be banned or otherwise marked as dead, just like a normal kill.
      *
-     * This implementation assumes per-player data in Players/<uuid>.yml and
+     * This implementation assumes per-player data in players/<uuid>.yml and
      * stores hearts under "lifesteal.hearts". Adjust the paths to match your
      * existing data model if needed.
      */
@@ -768,11 +832,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
      */
     private int loadHeartsFromFile(UUID uuid) {
         if (playersFolder == null) {
-            playersFolder = new File(getDataFolder(), "players");
-        }
-
-        if (!playersFolder.exists()) {
-            playersFolder.mkdirs();
+            playersFolder = resolvePlayersFolder();
         }
 
         File file = new File(playersFolder, uuid.toString() + ".yml");
@@ -786,15 +846,11 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Saves a player's heart count to Players/<uuid>.yml under "lifesteal.hearts".
+     * Saves a player's heart count to players/<uuid>.yml under "lifesteal.hearts".
      */
     private void saveHeartsToFile(UUID uuid, int hearts) {
         if (playersFolder == null) {
-            playersFolder = new File(getDataFolder(), "players");
-        }
-
-        if (!playersFolder.exists()) {
-            playersFolder.mkdirs();
+            playersFolder = resolvePlayersFolder();
         }
 
         File file = new File(playersFolder, uuid.toString() + ".yml");
@@ -1021,30 +1077,60 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         double vMax = getBaseMaxHealth(victim);
         int vMaxHalf = (int) Math.round(vMax); // base in half-hearts
 
-        if (killer != null && killer != victim) {
-            // PVP kill: victim loses 1 heart (2 half-hearts), killer gains what was actually taken
-            int toSteal = Math.min(2, vMaxHalf);
+        boolean environmentalDeath = !(victim.getLastDamageCause() instanceof EntityDamageByEntityEvent);
+        boolean pvpDeath = !environmentalDeath && killer != null && killer != victim;
+
+        if (pvpDeath) {
+            if (!hasUnlockedPvp(killer) || !hasUnlockedPvp(victim)) {
+                lastHitMap.remove(victim.getUniqueId());
+                return;
+            }
+
+            int toSteal = Math.min((int) Math.round(pvpLossHearts * 2.0), vMaxHalf);
+            int actualStolen = 0;
             if (toSteal > 0) {
                 int actualDeltaVictim = applyMaxHealthChange(victim, -toSteal);
-                int actualStolen = Math.abs(actualDeltaVictim);
+                actualStolen = Math.abs(actualDeltaVictim);
                 if (actualStolen > 0) {
                     applyMaxHealthChange(killer, actualStolen);
                 }
+            }
+
+            if (actualStolen > 0) {
+                String victimMsg = colorize(getConfig().getString("messages.pvp-death-victim",
+                        "&cYou were killed by &e{killer}&c and lost &4{hearts}&c heart(s)!"));
+                victimMsg = victimMsg.replace("{killer}", killer.getName())
+                        .replace("{hearts}", formatHearts(actualStolen));
+                victim.sendMessage(victimMsg);
+
+                String killerMsg = colorize(getConfig().getString("messages.pvp-death-killer",
+                        "&aYou killed &e{victim}&a and gained &2{hearts}&a heart(s)!"));
+                killerMsg = killerMsg.replace("{victim}", victim.getName())
+                        .replace("{hearts}", formatHearts(actualStolen));
+                killer.sendMessage(killerMsg);
             }
 
             handleBanOrRevive(victim);
             handleSectionTradeOnKill(killer, victim);
 
         } else {
-            // Environmental / non-PVP death: victim loses 0.5 heart max and drops Broken Heart
-            int toLose = Math.min(1, vMaxHalf);
+            // Environmental / non-PVP death: victim loses configured amount and drops Broken Heart(s)
+            int toLose = Math.min((int) Math.round(envLossHearts * 2.0), vMaxHalf);
+            int actualLost = 0;
             if (toLose > 0) {
                 int actualDelta = applyMaxHealthChange(victim, -toLose);
-                int actualLost = Math.abs(actualDelta);
+                actualLost = Math.abs(actualDelta);
                 if (actualLost > 0) {
                     ItemStack heart = createBrokenHeart(actualLost);
                     victim.getWorld().dropItemNaturally(victim.getLocation(), heart);
                 }
+            }
+
+            if (actualLost > 0) {
+                String envMsg = colorize(getConfig().getString("messages.env-death-loss",
+                        "&cYou died to the environment and lost &4{hearts}&c heart(s)!"));
+                envMsg = envMsg.replace("{hearts}", formatHearts(actualLost));
+                victim.sendMessage(envMsg);
             }
 
             handleBanOrRevive(victim);
