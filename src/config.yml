@@ -55,8 +55,18 @@ messages:
   banned-message: "&4You have run out of hearts and have been banned from the world."
   saved-by-destroyed-heart: "&dA destroyed Broken Heart has saved you from banishment!"
 
+  ban-login: "&cYou are banned by the Lifesteal system (no hearts remaining)."
+  combat-log-ban: "You lost all your hearts while logged out in combat."
+
+  pvp-locked-self: "&cYou must unlock PVP before fighting other players."
+  pvp-locked-target: "&cThat player hasn't unlocked PVP yet."
+  pvp-locked-victim: "&cYou haven't unlocked PVP yet. Progress the PVP Unlock entry to enable PVP."
+
   section-bump-up: "&aYour kill has bumped you up to section &e{section}&a!"
   section-bump-down: "&cDying to a lower-section player has set you back to section &e{section}&c!"
+
+  pending-revive: "&dA Broken Heart that was destroyed brought you back with {hearts} half-heart(s)."
+  broken-heart-use: "&dYou feel a tiny spark of life return. (&c+½&d heart)"
 
 # ----------------------------------------------------------
 # Persisted data
