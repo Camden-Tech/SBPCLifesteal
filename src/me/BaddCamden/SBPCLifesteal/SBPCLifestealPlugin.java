@@ -96,6 +96,10 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
     private static final String PVP_UNLOCK_ENTRY_ID = "pvp_unlock";
 
+    private final Map<String, String> messages = new HashMap<>();
+    private String brokenHeartName;
+    private List<String> brokenHeartLore = new ArrayList<>();
+
     // players that have taken/inflicted PVP damage (for one-time warnings)
     private final Set<UUID> pvpWarned = new HashSet<>();
   
@@ -121,13 +125,13 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
     // destroyed Broken Hearts that have not yet been used to revive
     private int destroyedHalfHeartsStock = 0;
-	 // Minimum allowed max health (in health points, not hearts)
-	 // e.g. config "min-max-health: 2.0" means 1 heart.
-	 private double minMaxHealth;
-	//Hearts lost on PVP / environmental death (in hearts, not half-hearts)
-	private double pvpLossHearts;
-	private double envLossHearts;
-	private final long hundredYearsMs = 100L * 365L * 24L * 60L * 60L * 1000L;
+    // Minimum allowed max health (in health points, not hearts)
+    // e.g. config "min-max-health: 2.0" means 1 heart.
+    private double minMaxHealth;
+    //Hearts lost on PVP / environmental death (in hearts, not half-hearts)
+    private double pvpLossHearts;
+    private double envLossHearts;
+    private final long hundredYearsMs = 100L * 365L * 24L * 60L * 60L * 1000L;
     // pending revive hearts for offline players (UUID -> half-hearts)
     private final Map<UUID, Integer> pendingReviveHearts = new HashMap<>();
 
@@ -174,20 +178,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         combatLoggerOwnerKey = new NamespacedKey(this, "combat_logger_owner");
         this.brokenHeartKey = new NamespacedKey(this, "broken_heart");
         this.playersFolder = resolvePlayersFolder();
-        // Hearts lost (in hearts)
-        pvpLossHearts = getConfig().getDouble("lifesteal.pvp-loss-hearts", 1.0);
-        envLossHearts = getConfig().getDouble("lifesteal.env-loss-hearts", 0.5);
-
-        // Minimum max health (in health points). 2.0 = 1 heart.
-        minMaxHealth = getConfig().getDouble("lifesteal.min-max-health", 2.0);
-
-        ConfigurationSection combatLogConfig = getConfig().getConfigurationSection("combat-log");
-        combatTagDurationMs = 1000L * (combatLogConfig != null
-                ? combatLogConfig.getLong("tag-duration-seconds", 5 * 60)
-                : 5 * 60L);
-        combatLogZombieTtlMs = 1000L * (combatLogConfig != null
-                ? combatLogConfig.getLong("zombie-ttl-seconds", 2 * 60)
-                : 2 * 60L);
+        loadConfiguredValues();
 
         loadData();
         combatLogManager = new CombatLogManager(this, combatTagDurationMs, combatLogZombieTtlMs, playersFolder);
@@ -260,6 +251,74 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
 
         return lower;
+    }
+
+    private void loadConfiguredValues() {
+        FileConfiguration cfg = getConfig();
+
+        // Hearts lost (in hearts)
+        pvpLossHearts = cfg.getDouble("lifesteal.pvp-loss-hearts", 1.0);
+        envLossHearts = cfg.getDouble("lifesteal.env-loss-hearts", 0.5);
+
+        // Minimum max health (in health points). 2.0 = 1 heart.
+        minMaxHealth = cfg.getDouble("lifesteal.min-max-health", 2.0);
+
+        ConfigurationSection combatLogConfig = cfg.getConfigurationSection("combat-log");
+        combatTagDurationMs = 1000L * (combatLogConfig != null
+                ? combatLogConfig.getLong("tag-duration-seconds", 5 * 60)
+                : 5 * 60L);
+        combatLogZombieTtlMs = 1000L * (combatLogConfig != null
+                ? combatLogConfig.getLong("zombie-ttl-seconds", 2 * 60)
+                : 2 * 60L);
+
+        brokenHeartName = colorize(cfg.getString("broken-heart-item.name", "&cBroken Heart"));
+        brokenHeartLore = colorizeList(cfg.getStringList("broken-heart-item.lore"));
+
+        loadMessages(cfg);
+    }
+
+    private void loadMessages(FileConfiguration cfg) {
+        messages.clear();
+        putMessage("pvp-first-hit-victim", cfg.getString("messages.pvp-first-hit-victim",
+                "&c&lWatch out! &fDying to another player who is in a &ehigher section&f than you will cost you a section!"));
+        putMessage("pvp-first-hit-attacker", cfg.getString("messages.pvp-first-hit-attacker",
+                "&a&lHe he he! &fKilling another player who is in a &ehigher section&f than you will gain you a section!"));
+        putMessage("pvp-death-victim", cfg.getString("messages.pvp-death-victim",
+                "&cYou were killed by &e{killer}&c and lost &4{hearts}&c heart(s)!"));
+        putMessage("pvp-death-killer", cfg.getString("messages.pvp-death-killer",
+                "&aYou killed &e{victim}&a and gained &2{hearts}&a heart(s)!"));
+        putMessage("env-death-loss", cfg.getString("messages.env-death-loss",
+                "&cYou died to the environment and lost &4{hearts}&c heart(s)!"));
+        putMessage("saved-by-destroyed-heart", cfg.getString("messages.saved-by-destroyed-heart",
+                "&dA destroyed Broken Heart has saved you from banishment!"));
+        putMessage("banned-message", cfg.getString("messages.banned-message",
+                "&4You have run out of hearts and have been banned from the world."));
+        putMessage("section-bump-up", cfg.getString("messages.section-bump-up",
+                "&aYour kill has bumped you up to section &e{section}&a!"));
+        putMessage("section-bump-down", cfg.getString("messages.section-bump-down",
+                "&cDying to a lower-section player has set you back to section &e{section}&c!"));
+        putMessage("pvp-locked-self", cfg.getString("messages.pvp-locked-self",
+                "&cYou must unlock PVP before fighting other players."));
+        putMessage("pvp-locked-target", cfg.getString("messages.pvp-locked-target",
+                "&cThat player hasn't unlocked PVP yet."));
+        putMessage("pvp-locked-victim", cfg.getString("messages.pvp-locked-victim",
+                "&cYou haven't unlocked PVP yet. Progress the PVP Unlock entry to enable PVP."));
+        putMessage("pending-revive", cfg.getString("messages.pending-revive",
+                "&dA Broken Heart that was destroyed brought you back with {hearts} half-heart(s)."));
+        putMessage("broken-heart-use", cfg.getString("messages.broken-heart-use",
+                "&dYou feel a tiny spark of life return. (&c+½&d heart)"));
+        putMessage("ban-login", cfg.getString("messages.ban-login",
+                "&cYou are banned by the Lifesteal system (no hearts remaining)."));
+        putMessage("combat-log-ban", cfg.getString("messages.combat-log-ban",
+                "You lost all your hearts while logged out in combat."));
+    }
+
+    private void putMessage(String key, String raw) {
+        messages.put(key, colorize(raw));
+    }
+
+    private String msg(String key) {
+        return messages.getOrDefault(key, "");
     }
 
     // ------------------------------------------------------------------------
@@ -388,10 +447,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         ItemStack stack = new ItemStack(Material.BEETROOT, amount);
         ItemMeta meta = stack.getItemMeta();
         if (meta != null) {
-            String displayName = getConfig().getString("broken-heart-item.name", "&cBroken Heart");
-            List<String> lore = getConfig().getStringList("broken-heart-item.lore");
-            meta.setDisplayName(colorize(displayName));
-            meta.setLore(colorizeList(lore));
+            meta.setDisplayName(brokenHeartName);
+            meta.setLore(brokenHeartLore);
             meta.getPersistentDataContainer().set(brokenHeartKey, PersistentDataType.BYTE, (byte) 1);
             stack.setItemMeta(meta);
         }
@@ -658,7 +715,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
 
         Bukkit.getScheduler().runTask(this, () -> {
-            p.kickPlayer(colorize("&cYou have lost all of your hearts and are banned by the Lifesteal system."));
+            p.kickPlayer(msg("banned-message"));
         });
 
         getLogger().info("Lifesteal banned player " + p.getName());
@@ -669,7 +726,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         destroyedHalfHeartsStock--;
         if (destroyedHalfHeartsStock < 0) destroyedHalfHeartsStock = 0;
         setBaseMaxHealth(p, 1.0); // ½ heart max
-        p.sendMessage(colorize("&dA destroyed Broken Heart saved you. You return with &c½&d heart!"));
+        p.sendMessage(msg("saved-by-destroyed-heart"));
         getLogger().info("Destroyed Broken Heart prevented ban for " + p.getName());
         saveData();
     }
@@ -750,8 +807,16 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             SbpcAPI.dropNowDisallowedEquippedItems(vId, victim.getLocation());
         }
 
-        killer.sendMessage(colorize("&a&lHe he he! Killing another player in a higher section gained you a section!"));
-        victim.sendMessage(colorize("&c&lYou lost a progression section for dying to someone in a lower section."));
+        String newKillerSec = SbpcAPI.getCurrentSectionId(kId);
+        String newVictimSec = SbpcAPI.getCurrentSectionId(vId);
+
+        String killerMsg = msg("section-bump-up").replace("{section}",
+                newKillerSec != null ? newKillerSec : "?");
+        String victimMsg = msg("section-bump-down").replace("{section}",
+                newVictimSec != null ? newVictimSec : "?");
+
+        killer.sendMessage(killerMsg);
+        victim.sendMessage(victimMsg);
         saveData();
     }
 
@@ -760,10 +825,10 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         boolean changedB = pvpWarned.add(b.getUniqueId());
 
         if (changedA) {
-            a.sendMessage(colorize("&c&lWatch out! Dying to another player who is in a lower section than you will cost you a section!"));
+            a.sendMessage(msg("pvp-first-hit-victim"));
         }
         if (changedB) {
-            b.sendMessage(colorize("&a&lHe he he! Killing another player who is in a higher section than you will gain you a section!"));
+            b.sendMessage(msg("pvp-first-hit-attacker"));
         }
     }
     /**
@@ -803,7 +868,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
                 // Use OfflinePlayer#ban to avoid BanList ambiguity
                 offlineVictim.ban(
-                        "You lost all your hearts while logged out in combat.",
+                        msg("combat-log-ban"),
                         expires,
                         "SBPCLifesteal"
                 );
@@ -991,12 +1056,13 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         // Mirror your normal "final death" behavior (lifeline stock, then ban).
 
         // --- OPTIONAL LIFELINE: destroyed broken hearts stock ---
-        int stock = getConfig().getInt("destroyedHalfHeartsStock", 0);
-        if (stock > 0) {
+        if (destroyedHalfHeartsStock > 0) {
             // Consume ONE half-heart lifeline (adjust exactly how you do it elsewhere)
-            stock -= 1;
-            getConfig().set("destroyedHalfHeartsStock", stock);
-            saveConfig();
+            destroyedHalfHeartsStock -= 1;
+            if (destroyedHalfHeartsStock < 0) {
+                destroyedHalfHeartsStock = 0;
+            }
+            saveData();
 
             // Keep them at minimum max health and clamp current health
             maxHealthAttr.setBaseValue(minMaxHealth);
@@ -1004,15 +1070,12 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
                 player.setHealth(minMaxHealth);
             }
 
-            String savedMsg = colorize(getConfig().getString("messages.saved-by-destroyed-heart",
-                    "&dA destroyed Broken Heart has saved you from banishment!"));
-            player.sendMessage(savedMsg);
+            player.sendMessage(msg("saved-by-destroyed-heart"));
             return;
         }
 
         // No lifelines left -> ban as in a normal "out of hearts" case.
-        String banReason = colorize(getConfig().getString("messages.banned-message",
-                "You have run out of hearts and have been banned from the world."));
+        String banReason = msg("banned-message");
 
         // Use Player#ban with a far-future date to effectively permanent-ban.
         // (You already switched to using .ban earlier.)
@@ -1060,14 +1123,14 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
         if (!hasUnlockedPvp(attacker)) {
             event.setCancelled(true);
-            attacker.sendMessage(colorize("&cYou must unlock PVP before fighting other players."));
+            attacker.sendMessage(msg("pvp-locked-self"));
             return;
         }
 
         if (!hasUnlockedPvp(victim)) {
             event.setCancelled(true);
-            attacker.sendMessage(colorize("&cThat player hasn't unlocked PVP yet."));
-            victim.sendMessage(colorize("&cYou haven't unlocked PVP yet. Progress the PVP Unlock entry to enable PVP."));
+            attacker.sendMessage(msg("pvp-locked-target"));
+            victim.sendMessage(msg("pvp-locked-victim"));
             return;
         }
 
@@ -1111,15 +1174,13 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             }
 
             if (actualStolen > 0) {
-                String victimMsg = colorize(getConfig().getString("messages.pvp-death-victim",
-                        "&cYou were killed by &e{killer}&c and lost &4{hearts}&c heart(s)!"));
-                victimMsg = victimMsg.replace("{killer}", killer.getName())
+                String victimMsg = msg("pvp-death-victim")
+                        .replace("{killer}", killer.getName())
                         .replace("{hearts}", formatHearts(actualStolen));
                 victim.sendMessage(victimMsg);
 
-                String killerMsg = colorize(getConfig().getString("messages.pvp-death-killer",
-                        "&aYou killed &e{victim}&a and gained &2{hearts}&a heart(s)!"));
-                killerMsg = killerMsg.replace("{victim}", victim.getName())
+                String killerMsg = msg("pvp-death-killer")
+                        .replace("{victim}", victim.getName())
                         .replace("{hearts}", formatHearts(actualStolen));
                 killer.sendMessage(killerMsg);
             }
@@ -1141,9 +1202,8 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             }
 
             if (actualLost > 0) {
-                String envMsg = colorize(getConfig().getString("messages.env-death-loss",
-                        "&cYou died to the environment and lost &4{hearts}&c heart(s)!"));
-                envMsg = envMsg.replace("{hearts}", formatHearts(actualLost));
+                String envMsg = msg("env-death-loss")
+                        .replace("{hearts}", formatHearts(actualLost));
                 victim.sendMessage(envMsg);
             }
 
@@ -1175,7 +1235,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         UUID id = event.getPlayer().getUniqueId();
         if (isBanned(id)) {
             event.disallow(PlayerLoginEvent.Result.KICK_BANNED,
-                    colorize("&cYou are banned by the Lifesteal system (no hearts remaining)."));
+                    msg("ban-login"));
         }
     }
 
@@ -1189,7 +1249,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
             if (amt > 0) {
                 setBaseMaxHealth(p, Math.max(0.0, getBaseMaxHealth(p)));
                 applyMaxHealthChange(p, amt);
-                p.sendMessage(colorize("&dA Broken Heart that was destroyed brought you back with " + amt + " half-heart(s)."));
+                p.sendMessage(msg("pending-revive").replace("{hearts}", String.valueOf(amt)));
             }
             saveData();
         }
@@ -1233,7 +1293,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
         // consume one
         item.setAmount(item.getAmount() - 1);
-        p.sendMessage(colorize("&dYou feel a tiny spark of life return. (&c+½&d heart)"));
+        p.sendMessage(msg("broken-heart-use"));
 
         event.setCancelled(true);
     }
