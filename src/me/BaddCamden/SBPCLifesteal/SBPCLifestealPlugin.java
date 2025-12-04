@@ -12,6 +12,7 @@ import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
@@ -598,7 +599,7 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
         // Accept both '&' and '§' as alternate color prefixes so admin-edited configs
         // or previously colorized strings still render correctly.
-        String normalized = raw.replace('§', '&');
+        String normalized = raw.replace("§", "&");
         return ChatColor.translateAlternateColorCodes('&', normalized);
     }
 
