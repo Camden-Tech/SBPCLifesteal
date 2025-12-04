@@ -32,7 +32,7 @@ import java.util.*;
  *   they died in PvP: items + XP drop and lifesteal logic should be applied.
  * - If the player rejoins first or 2 minutes pass, the zombie despawns and the player gets their
  *   items/XP back safely.
- * - Combat-log state is persisted per-player in plugins/SBPCLifesteal/Players/<uuid>.yml.
+ * - Combat-log state is persisted per-player in plugins/SBPCLifesteal/players/<uuid>.yml.
  */
 public class CombatLogManager implements Listener {
 
@@ -54,13 +54,13 @@ public class CombatLogManager implements Listener {
 
     private File playersFolder;
 
-    public CombatLogManager(SBPCLifestealPlugin plugin, long combatTagDurationMs, long zombieTtlMs) {
+    public CombatLogManager(SBPCLifestealPlugin plugin, long combatTagDurationMs, long zombieTtlMs, File playersFolder) {
         this.plugin = plugin;
         this.combatTagDurationMs = combatTagDurationMs;
         this.zombieTtlMs = zombieTtlMs;
-        this.playersFolder = new File(plugin.getDataFolder(), "Players");
-        if (!playersFolder.exists()) {
-            playersFolder.mkdirs();
+        this.playersFolder = playersFolder;
+        if (!this.playersFolder.exists()) {
+            this.playersFolder.mkdirs();
         }
 
         // Schedule TTL task
@@ -99,7 +99,7 @@ public class CombatLogManager implements Listener {
     // ------------------------------------------------------------------------
 
     /**
-     * Called from plugin.onEnable() after Players folder and configs exist.
+     * Called from plugin.onEnable() after players folder and configs exist.
      */
     public void loadAllEntries() {
         if (!playersFolder.exists() || !playersFolder.isDirectory()) {
@@ -150,7 +150,7 @@ public class CombatLogManager implements Listener {
      */
     public void saveAllEntries() {
         if (!playersFolder.exists() && !playersFolder.mkdirs()) {
-            plugin.getLogger().warning("Could not create Players folder for combat log persistence.");
+            plugin.getLogger().warning("Could not create players folder for combat log persistence.");
             return;
         }
 
