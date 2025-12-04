@@ -534,7 +534,10 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         if (raw == null) {
             return "";
         }
-        return ChatColor.translateAlternateColorCodes('&', raw);
+        // Accept both '&' and '§' as alternate color prefixes so admin-edited configs
+        // or previously colorized strings still render correctly.
+        String normalized = raw.replace('§', '&');
+        return ChatColor.translateAlternateColorCodes('&', normalized);
     }
 
     private List<String> colorizeList(List<String> rawList) {
@@ -990,15 +993,15 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
                 player.setHealth(minMaxHealth);
             }
 
-            String savedMsg = getConfig().getString("messages.saved-by-destroyed-heart",
-                    "&dA destroyed Broken Heart has saved you from banishment!");
-            player.sendMessage(ChatColor.translateAlternateColorCodes('&', savedMsg));
+            String savedMsg = colorize(getConfig().getString("messages.saved-by-destroyed-heart",
+                    "&dA destroyed Broken Heart has saved you from banishment!"));
+            player.sendMessage(savedMsg);
             return;
         }
 
         // No lifelines left -> ban as in a normal "out of hearts" case.
-        String banReason = getConfig().getString("messages.banned-message",
-                "You have run out of hearts and have been banned from the world.");
+        String banReason = colorize(getConfig().getString("messages.banned-message",
+                "You have run out of hearts and have been banned from the world."));
 
         // Use Player#ban with a far-future date to effectively permanent-ban.
         // (You already switched to using .ban earlier.)
