@@ -54,6 +54,10 @@ public class CombatLogManager implements Listener {
 
     private File playersFolder;
 
+    /**
+     * Build a combat-log manager with the timing configuration and data folder it should use.
+     * The constructor also schedules the repeating TTL cleanup task.
+     */
     public CombatLogManager(SBPCLifestealPlugin plugin, long combatTagDurationMs, long zombieTtlMs, File playersFolder) {
         this.plugin = plugin;
         this.combatTagDurationMs = combatTagDurationMs;
@@ -76,14 +80,24 @@ public class CombatLogManager implements Listener {
     // Combat tagging
     // ------------------------------------------------------------------------
 
+    /**
+     * Mark a player as combat tagged until {@code nowMillis + combatTagDurationMs}.
+     */
     public void tagCombat(UUID victim, long nowMillis) {
         combatTagUntil.put(victim, nowMillis + combatTagDurationMs);
     }
 
+    /**
+     * Clear any combat tag for the given player.
+     */
     public void clearTag(UUID uuid) {
         combatTagUntil.remove(uuid);
     }
 
+    /**
+     * Determine if a player is still tagged for combat at the given time.
+     * Expired tags are removed as part of the check.
+     */
     public boolean isCombatTagged(UUID uuid, long nowMillis) {
         Long until = combatTagUntil.get(uuid);
         if (until == null) return false;
@@ -178,6 +192,9 @@ public class CombatLogManager implements Listener {
     // ------------------------------------------------------------------------
 
     @EventHandler
+    /**
+     * When a tagged player logs out, capture their state and spawn the proxy zombie.
+     */
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
@@ -233,6 +250,9 @@ public class CombatLogManager implements Listener {
     }
 
     @EventHandler
+    /**
+     * Restore items/XP to a returning player if they had an active combat-log entry.
+     */
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
@@ -277,6 +297,9 @@ public class CombatLogManager implements Listener {
     // ------------------------------------------------------------------------
 
     @EventHandler(ignoreCancelled = true)
+    /**
+     * Handles combat tagging and ensures only players can damage combat-log zombies.
+     */
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
         Entity victim = event.getEntity();
 
@@ -314,6 +337,9 @@ public class CombatLogManager implements Listener {
     }
 
     @EventHandler(ignoreCancelled = true)
+    /**
+     * Blocks environmental damage on combat-log zombies so only player actions matter.
+     */
     public void onEntityDamage(EntityDamageEvent event) {
         Entity entity = event.getEntity();
         if (!isCombatLogZombie(entity)) {
@@ -334,6 +360,9 @@ public class CombatLogManager implements Listener {
     }
 
     @EventHandler
+    /**
+     * When a combat-log zombie dies, drop stored items/XP and propagate lifesteal logic.
+     */
     public void onEntityDeath(EntityDeathEvent event) {
         Entity entity = event.getEntity();
         if (!isCombatLogZombie(entity)) {
@@ -410,6 +439,9 @@ public class CombatLogManager implements Listener {
     // TTL check task
     // ------------------------------------------------------------------------
 
+    /**
+     * Periodic task that despawns expired zombies while keeping player data intact.
+     */
     private void tickZombieTTL() {
         long now = System.currentTimeMillis();
 
@@ -438,6 +470,9 @@ public class CombatLogManager implements Listener {
     // Spawn / despawn helpers
     // ------------------------------------------------------------------------
 
+    /**
+     * Spawn a no-AI glowing zombie representing the offline player using stored data.
+     */
     private void spawnZombieForEntry(CombatLogEntry entry) {
         Location loc = entry.toLocation(plugin.getServer());
         if (loc == null) {
@@ -501,6 +536,9 @@ public class CombatLogManager implements Listener {
         zombieToPlayer.put(zombie.getUniqueId(), entry.getPlayerId());
     }
 
+    /**
+     * Remove a combat-log zombie entity from the world and mappings.
+     */
     private void despawnZombie(UUID zombieId) {
         if (zombieId == null) return;
         Entity entity = null;
@@ -512,11 +550,17 @@ public class CombatLogManager implements Listener {
         zombieToPlayer.remove(zombieId);
     }
 
+    /**
+     * Check whether the given entity is a tracked combat-log zombie.
+     */
     private boolean isCombatLogZombie(Entity entity) {
         if (!(entity instanceof Zombie)) return false;
         return zombieToPlayer.containsKey(entity.getUniqueId());
     }
 
+    /**
+     * Clone an item stack for display on the zombie, returning null for empty slots.
+     */
     private ItemStack cloneOrNull(ItemStack stack) {
         if (stack == null || stack.getType() == Material.AIR) return null;
         return stack.clone();
@@ -526,6 +570,9 @@ public class CombatLogManager implements Listener {
     // Per-player file persistence helpers
     // ------------------------------------------------------------------------
 
+    /**
+     * Rehydrate a stored combat-log entry from disk into memory.
+     */
     private CombatLogEntry loadEntryFromConfig(UUID uuid, ConfigurationSection sec) {
         if (sec == null) return null;
 
@@ -573,6 +620,9 @@ public class CombatLogManager implements Listener {
         return entry;
     }
 
+    /**
+     * Serialize a combat-log entry into a YAML configuration section.
+     */
     private void saveEntryToConfig(CombatLogEntry entry, ConfigurationSection sec) {
         sec.set("world", entry.getWorldName());
         sec.set("x", entry.getX());
@@ -596,6 +646,9 @@ public class CombatLogManager implements Listener {
         sec.set("armor", entry.getArmor() != null ? Arrays.asList(entry.getArmor()) : null);
     }
 
+    /**
+     * Persist a single combat-log entry immediately to ensure crash safety.
+     */
     private void saveSingleEntry(CombatLogEntry entry) {
         UUID uuid = entry.getPlayerId();
         File file = new File(playersFolder, uuid.toString() + ".yml");
@@ -617,6 +670,9 @@ public class CombatLogManager implements Listener {
         }
     }
 
+    /**
+     * Remove the combat-log section from a player's data file once resolved.
+     */
     private void clearCombatLogSection(UUID uuid) {
         File file = new File(playersFolder, uuid.toString() + ".yml");
         if (!file.exists()) return;
