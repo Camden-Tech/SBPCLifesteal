@@ -115,6 +115,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     private static final class PendingCombatLogDeath {
         final boolean pvp;
 
+        /**
+         * Record whether the offline kill was caused by a player (PVP) or the environment.
+         */
         PendingCombatLogDeath(boolean pvp) {
             this.pvp = pvp;
         }
@@ -154,6 +157,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         final UUID attackerId;
         final long timestampMillis;
 
+        /**
+         * Snapshot of who last damaged a victim and when.
+         */
         private LastHitInfo(UUID attackerId, long timestampMillis) {
             this.attackerId = attackerId;
             this.timestampMillis = timestampMillis;
@@ -167,6 +173,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     private static final long LAST_HIT_WINDOW_MS = 30_000L;
 
 
+    /**
+     * Bootstrap the plugin: verify dependencies, load configuration and data, then register listeners/tasks.
+     */
     @Override
     public void onEnable() {
         if (Bukkit.getPluginManager().getPlugin("SBPC") == null) {
@@ -201,6 +210,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         getLogger().info("SBCPLifesteal enabled.");
     }
 
+    /**
+     * Shutdown hook that cancels tasks, flushes combat-log data, and persists lifesteal state.
+     */
     @Override
     public void onDisable() {
         if (healthTaskId != -1) {
@@ -213,6 +225,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         saveData();
     }
 
+    /**
+     * Ensure the players data folder exists, migrating legacy "Players" capitalization if needed.
+     */
     private File resolvePlayersFolder() {
         File lower = new File(getDataFolder(), "players");
         File upper = new File(getDataFolder(), "Players");
@@ -254,6 +269,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         return lower;
     }
 
+    /**
+     * Read configuration values for lifesteal, combat logging, messaging, and Broken Heart items.
+     */
     private void loadConfiguredValues() {
         FileConfiguration cfg = getConfig();
 
@@ -278,6 +296,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         loadMessages(cfg);
     }
 
+    /**
+     * Populate the internal message map with colorized strings from config defaults.
+     */
     private void loadMessages(FileConfiguration cfg) {
         messages.clear();
         putMessage("pvp-first-hit-victim", cfg.getString("messages.pvp-first-hit-victim",
@@ -314,10 +335,16 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
                 "You lost all your hearts while logged out in combat."));
     }
 
+    /**
+     * Helper to cache a message after applying color codes.
+     */
     private void putMessage(String key, String raw) {
         messages.put(key, colorize(raw));
     }
 
+    /**
+     * Fetch a colorized message string by key, defaulting to empty if missing.
+     */
     private String msg(String key) {
         return messages.getOrDefault(key, "");
     }
@@ -326,6 +353,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     // Persistence
     // ------------------------------------------------------------------------
 
+    /**
+     * Load persisted lifesteal state for bans, destroyed hearts, pending revives, and warnings.
+     */
     private void loadData() {
         this.destroyedHalfHeartsStock = getConfig().getInt("destroyedHalfHeartsStock", 0);
 
@@ -382,6 +412,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Persist all lifesteal bookkeeping (ban queue, pending hearts, warnings) to disk.
+     */
     private void saveData() {
         if (playersFolder == null) {
             // plugin never fully enabled (e.g. SBPC missing)
@@ -444,6 +477,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     // Broken Heart item
     // ------------------------------------------------------------------------
 
+    /**
+     * Create a Broken Heart item stack with the configured name/lore and data marker.
+     */
     private ItemStack createBrokenHeart(int amount) {
         ItemStack stack = new ItemStack(Material.BEETROOT, amount);
         ItemMeta meta = stack.getItemMeta();
@@ -456,6 +492,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         return stack;
     }
 
+    /**
+     * Check whether an item stack is a Broken Heart (by material and PDC marker).
+     */
     private boolean isBrokenHeart(ItemStack stack) {
         if (stack == null || stack.getType() != Material.BEETROOT) return false;
         ItemMeta meta = stack.getItemMeta();
@@ -571,18 +610,27 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         return victim.getKiller();
     }
 
+    /**
+     * Read the player's base max health attribute, defaulting to 20.0 when missing.
+     */
     private double getBaseMaxHealth(Player p) {
         AttributeInstance attr = p.getAttribute(Attribute.MAX_HEALTH);
         if (attr == null) return 20.0;
         return attr.getBaseValue();
     }
 
+    /**
+     * Determine the default heart count configured for new players.
+     */
     private double getDefaultConfiguredHearts() {
         double configuredBase = getConfig().getDouble("lifesteal.base-max-health", 20.0);
         double fromConfigured = configuredBase / 2.0;
         return Math.max(1.0, fromConfigured);
     }
 
+    /**
+     * Apply a new base max health to the player while clamping and syncing current health.
+     */
     private void setBaseMaxHealth(Player p, double value) {
         AttributeInstance attr = p.getAttribute(Attribute.MAX_HEALTH);
         if (attr == null) return;
@@ -593,6 +641,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Translate alternate color codes (& and §) to Bukkit formatting codes.
+     */
     private String colorize(String raw) {
         if (raw == null) {
             return "";
@@ -603,6 +654,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         return ChatColor.translateAlternateColorCodes('&', normalized);
     }
 
+    /**
+     * Apply colorization to each string in a list, returning an empty list for null inputs.
+     */
     private List<String> colorizeList(List<String> rawList) {
         if (rawList == null) {
             return Collections.emptyList();
@@ -610,6 +664,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         return rawList.stream().map(this::colorize).collect(Collectors.toList());
     }
 
+    /**
+     * Format a half-heart count into a human-friendly string (whole or one decimal place).
+     */
     private String formatHearts(int halfHearts) {
         double hearts = halfHearts / 2.0;
         if (Math.abs(hearts - Math.round(hearts)) < 0.0001) {
@@ -636,6 +693,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         return deltaHalfHearts;
     }
 
+    /**
+     * Save the player's heart total (in hearts) to their data file using the provided base max health.
+     */
     private void persistPlayerHearts(Player p, double maxHealthValue) {
         double hearts = maxHealthValue / 2.0;
         saveHeartsToFile(p.getUniqueId(), hearts);
@@ -645,6 +705,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     // Health-based tick multiplier (handled HERE)
     // ------------------------------------------------------------------------
 
+    /**
+     * Scheduler task that computes health multipliers and feeds extra SBPC time skips per player.
+     */
     private void tickHealthBasedSkips() {
         for (Player p : Bukkit.getOnlinePlayers()) {
             double factor = computeHealthFactor(p);
@@ -705,10 +768,16 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     // Ban & destroyed heart helpers
     // ------------------------------------------------------------------------
 
+    /**
+     * Check if a player is marked as lifesteal-banned in memory.
+     */
     private boolean isBanned(UUID uuid) {
         return bannedPlayers.contains(uuid);
     }
 
+    /**
+     * Add a player to the lifesteal ban list and immediately kick them with a message.
+     */
     private void banPlayer(Player p) {
         UUID id = p.getUniqueId();
         if (bannedPlayers.add(id)) {
@@ -723,6 +792,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         saveData();
     }
 
+    /**
+     * Consume a destroyed Broken Heart stockpile to revive a player at 0.5 heart max health.
+     */
     private void spendDestroyedHeartOnNewDeath(Player p) {
         destroyedHalfHeartsStock--;
         if (destroyedHalfHeartsStock < 0) destroyedHalfHeartsStock = 0;
@@ -732,6 +804,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         saveData();
     }
 
+    /**
+     * Track Broken Hearts lost to the void/fire/etc. and use them to revive banned players.
+     */
     private void onBrokenHeartDestroyed(int amount) {
         if (amount <= 0) return;
         destroyedHalfHeartsStock += amount;
@@ -754,6 +829,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         saveData();
     }
 
+    /**
+     * Delay-count a Broken Heart item that might be destroyed, ensuring we only count once.
+     */
     private void scheduleBrokenHeartDestructionCount(Item item, int amount) {
         UUID id = item.getUniqueId();
         Bukkit.getScheduler().runTask(this, () -> {
@@ -771,6 +849,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     // Section trade via SBPC
     // ------------------------------------------------------------------------
 
+    /**
+     * Swap SBPC sections between a lower-section killer and higher-section victim when eligible.
+     */
     private void handleSectionTradeOnKill(Player killer, Player victim) {
         UUID kId = killer.getUniqueId();
         UUID vId = victim.getUniqueId();
@@ -821,6 +902,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         saveData();
     }
 
+    /**
+     * Send the one-time PVP warning messages to both participants.
+     */
     private void markPvpWarned(Player a, Player b) {
         boolean changedA = pvpWarned.add(a.getUniqueId());
         boolean changedB = pvpWarned.add(b.getUniqueId());
@@ -966,6 +1050,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     // Events
     // ------------------------------------------------------------------------
 
+    /**
+     * Bridge hook so the main plugin can react to combat-log zombie kills created by CombatLogManager.
+     */
     @EventHandler
     public void onCombatLoggerZombieDeath(EntityDeathEvent event) {
         Entity entity = event.getEntity();
@@ -999,6 +1086,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         // Optionally: remove any extra bookkeeping you keep for the combat logger here
         // (e.g., remove from some map, clear persisted state for this zombie, etc.)
     }
+    /**
+     * When a player rejoins and their proxy zombie died offline, apply the stored heart loss.
+     */
     @EventHandler
     public void onPlayerJoinAfterCombatLog(PlayerJoinEvent event) {
         Player player = event.getPlayer();
@@ -1089,6 +1179,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
 
 
 
+    /**
+     * Track last-hits for kill attribution, enforce PVP unlocks, and warn first-time combatants.
+     */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     public void onPvpDamage(EntityDamageByEntityEvent event) {
         Entity victimEntity = event.getEntity();
@@ -1142,11 +1235,17 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         markPvpWarned(attacker, victim);
     }
 
+    /**
+     * Check SBPC for the custom PVP unlock gate.
+     */
     private boolean hasUnlockedPvp(Player player) {
         return SbpcAPI.isCustomUnlocked(player.getUniqueId(), PVP_UNLOCK_ENTRY_ID);
     }
 
 
+    /**
+     * Core lifesteal handler for player deaths, covering both PVP and environmental cases.
+     */
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player victim = event.getEntity();
@@ -1218,6 +1317,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         lastHitMap.remove(victim.getUniqueId());
     }
 
+    /**
+     * Decide whether a player with zero hearts is revived by destroyed hearts or banned.
+     */
     private void handleBanOrRevive(Player victim) {
         double newMax = getBaseMaxHealth(victim);
         if (newMax > 0.0) {
@@ -1231,6 +1333,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Deny login to lifesteal-banned players before they fully join.
+     */
     @EventHandler
     public void onPlayerLogin(PlayerLoginEvent event) {
         UUID id = event.getPlayer().getUniqueId();
@@ -1240,6 +1345,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Restore pending revive hearts and synchronized max health when a player joins.
+     */
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player p = event.getPlayer();
@@ -1259,11 +1367,17 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         applyHeartsToOnlinePlayer(p, configuredHearts);
     }
 
+    /**
+     * Placeholder hook for symmetry; state is persisted elsewhere on disable/save.
+     */
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         // no special logic; state is saved via saveData/onDisable
     }
 
+    /**
+     * Reapply configured max health after respawn to avoid default values.
+     */
     @EventHandler
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
@@ -1275,6 +1389,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     // Broken Heart usage & destruction
     // ------------------------------------------------------------------------
 
+    /**
+     * Prevent Broken Hearts from being eaten directly.
+     */
     @EventHandler(ignoreCancelled = true)
     public void onItemConsume(PlayerItemConsumeEvent event) {
         if (isBrokenHeart(event.getItem())) {
@@ -1283,6 +1400,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Allow right-clicking a Broken Heart to consume it for half a heart of max health.
+     */
     @EventHandler(ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
         if (event.getHand() != EquipmentSlot.HAND) return;
@@ -1299,6 +1419,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         event.setCancelled(true);
     }
 
+    /**
+     * Prevent crafting recipes from using Broken Hearts as ingredients.
+     */
     @EventHandler(ignoreCancelled = true)
     public void onCraft(PrepareItemCraftEvent event) {
         Recipe recipe = event.getRecipe();
@@ -1315,6 +1438,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
         }
     }
 
+    /**
+     * Count Broken Hearts that despawn so they can be used as lifelines.
+     */
     @EventHandler(ignoreCancelled = true)
     public void onItemDespawn(ItemDespawnEvent event) {
         Item item = event.getEntity();
@@ -1326,6 +1452,9 @@ public class SBPCLifestealPlugin extends JavaPlugin implements Listener {
     }
 
 
+    /**
+     * Track Broken Hearts destroyed by damage sources like lava or explosions.
+     */
     @EventHandler(ignoreCancelled = true)
     public void onItemDamaged(EntityDamageEvent event) {
         if (!(event.getEntity() instanceof Item item)) return;
